@@ -1,0 +1,46 @@
+name: build
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: SvgConverter-windows
+          - os: macos-latest # Apple Silicon
+            artifact: SvgConverter-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - run: pyinstaller --noconfirm --windowed --name SvgConverter app.py
+
+      # upload-artifact は実行権限やシンボリックリンクを保持しないため、先に zip にする
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/SvgConverter.app ${{ matrix.artifact }}.zip
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist/SvgConverter -DestinationPath ${{ matrix.artifact }}.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.zip
+          retention-days: 14
