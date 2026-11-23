@@ -4,7 +4,8 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QImageReader, QPainter, QPixmap
+from PIL import Image
+from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
@@ -21,13 +22,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from converter import MAX_SIDE, SUPPORTED_SUFFIXES, Result, Settings, convert
+from converter import MAX_SIDE, SUPPORTED_SUFFIXES, Result, Settings, convert, load_rgba
 
 PREVIEW_SIZE = 420
 
 
 class _Signals(QObject):
-    done = Signal(int, object)  # object = converter.Result
+    done = Signal(int, object, object)  # converter.Result, プレビュー用 QImage
     failed = Signal(int, str)
 
 
@@ -41,7 +42,14 @@ class ConvertJob(QRunnable):
 
     def run(self):
         try:
-            self.signals.done.emit(self.job_id, convert(self.path, self.settings))
+            result = convert(self.path, self.settings)
+            if result.pixels is not None:
+                # ドットモードの SVG は result.pixels と画素単位で一致する（test_pixel_mode.py で検証）。
+                # 巨大な SVG を描き直すと Qt が数秒間 Python を止めるため、書き出した画素そのものを表示する
+                preview = scale_preview(to_qimage(result.pixels), crisp=True)
+            else:
+                preview = render_svg(result.svg)
+            self.signals.done.emit(self.job_id, result, preview)
         except Exception as e:  # 壊れた画像などは画面にメッセージを出す
             self.signals.failed.emit(self.job_id, str(e))
 
@@ -60,6 +68,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("SVG Converter")
         self.setAcceptDrops(True)
         self.image_path: str | None = None
+        self.source: QImage | None = None  # 左プレビュー用の元画像
         self.svg: str | None = None
         self.job_id = 0
         self.pool = QThreadPool.globalInstance()
@@ -77,6 +86,8 @@ class MainWindow(QMainWindow):
         self.mode_box = QComboBox()
         self.mode_box.addItem("カラー", "color")
         self.mode_box.addItem("白黒", "binary")
+        self.mode_box.addItem("ドット（画素そのまま）", "pixel")
+        self.mode_box.currentIndexChanged.connect(self.update_controls)
         self.mode_box.currentIndexChanged.connect(self.schedule_convert)
 
         self.curve_box = QComboBox()
@@ -115,6 +126,18 @@ class MainWindow(QMainWindow):
         container.setLayout(root)
         self.setCentralWidget(container)
 
+    def update_controls(self):
+        # ドットモードは画素をそのまま書き出すので、トレース用の調整項目は効かない
+        tracing = self.mode_box.currentData() != "pixel"
+        for w in (self.curve_box, self.speckle, self.precision):
+            w.setEnabled(tracing)
+        self.show_source()
+
+    def show_source(self):
+        if self.source is not None:
+            crisp = self.mode_box.currentData() == "pixel"
+            self.before.setPixmap(QPixmap.fromImage(scale_preview(self.source, crisp)))
+
     def _slider(self, lo: int, hi: int, value: int) -> QSlider:
         s = QSlider(Qt.Orientation.Horizontal)
         s.setRange(lo, hi)
@@ -143,22 +166,15 @@ class MainWindow(QMainWindow):
         if Path(path).suffix.lower() not in SUPPORTED_SUFFIXES:
             QMessageBox.warning(self, "未対応の形式", "PNG か JPEG を選んでください。")
             return
-        # 変換側と同じく EXIF の回転情報を反映して表示する（Qt の既定では反映されない）
-        reader = QImageReader(path)
-        reader.setAutoTransform(True)
-        pix = QPixmap.fromImage(reader.read())
-        if pix.isNull():
+        try:
+            # 変換と同じ読み込み処理を使い、回転や色の解釈をそろえる
+            image = to_qimage(load_rgba(path))
+        except Exception:  # 壊れた画像・巨大すぎる画像など
             QMessageBox.warning(self, "読み込み失敗", "画像を開けませんでした。")
             return
         self.image_path = path
-        self.before.setPixmap(
-            pix.scaled(
-                PREVIEW_SIZE,
-                PREVIEW_SIZE,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        )
+        self.source = image
+        self.show_source()
         self.start_convert()
 
     # --- 変換 ---
@@ -185,17 +201,20 @@ class MainWindow(QMainWindow):
         job.signals.failed.connect(self.on_failed)
         self.pool.start(job)
 
-    def on_done(self, job_id: int, result: Result):
+    def on_done(self, job_id: int, result: Result, preview: QImage):
         if job_id != self.job_id:  # 設定変更で古くなった結果は捨てる
             return
         self.svg = result.svg
-        self.after.setPixmap(render_svg(result.svg))
+        self.after.setPixmap(QPixmap.fromImage(preview))
         if result.path_count == 0:
             self.save_btn.setEnabled(False)
-            self.status.setText("図形が検出されませんでした。「色」や「ノイズ除去」を変えてみてください。")
+            if result.pixels is not None:
+                self.status.setText("透明な画素しかないため、書き出す図形がありません。")
+            else:
+                self.status.setText("図形が検出されませんでした。「色」や「ノイズ除去」を変えてみてください。")
             return
         self.save_btn.setEnabled(True)
-        message = f"変換完了（SVG {len(result.svg.encode()) / 1024:.0f} KB）"
+        message = f"変換完了（SVG {len(result.svg) / 1024:.0f} KB）"
         if result.scaled:
             message += f"　※長辺 {MAX_SIDE}px に縮小して変換しました"
         self.status.setText(message)
@@ -225,16 +244,42 @@ class MainWindow(QMainWindow):
         self.status.setText(f"保存しました: {path}")
 
 
-def render_svg(svg: str) -> QPixmap:
+def to_qimage(img: Image.Image) -> QImage:
+    rgba = img.convert("RGBA")
+    w, h = rgba.size
+    # copy(): QImage は bytes を参照するだけなので、bytes が消えても使えるよう複製する
+    return QImage(rgba.tobytes(), w, h, w * 4, QImage.Format.Format_RGBA8888).copy()
+
+
+def scale_preview(image: QImage, crisp: bool) -> QImage:
+    """プレビュー枠に収まるよう拡大縮小する。crisp=True（ドットモード）は画素のマスを見せる。"""
+    long_side = max(image.width(), image.height())
+    if crisp and long_side <= PREVIEW_SIZE:
+        # 補間せず整数倍で拡大し、画素のマスの大きさをそろえる
+        f = PREVIEW_SIZE // long_side
+        return image.scaled(
+            image.width() * f, image.height() * f, mode=Qt.TransformationMode.FastTransformation
+        )
+    return image.scaled(
+        PREVIEW_SIZE,
+        PREVIEW_SIZE,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+
+
+def render_svg(svg: str) -> QImage:
+    # 変換と同じ別スレッドで呼ぶ（QPixmap は画面側のスレッドでしか扱えないので QImage に描く）。
+    # ただし描画中は Python の実行が止まるため、巨大な SVG では別スレッドでも画面は固まる
     renderer = QSvgRenderer(svg.encode())
     size = renderer.defaultSize()
     size.scale(PREVIEW_SIZE, PREVIEW_SIZE, Qt.AspectRatioMode.KeepAspectRatio)
-    pix = QPixmap(size)
-    pix.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pix)
+    image = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
     renderer.render(painter)
     painter.end()
-    return pix
+    return image
 
 
 def main():
