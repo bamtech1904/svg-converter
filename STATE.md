@@ -13,6 +13,7 @@
 - vtracer は変換中に GIL を解放しない。別スレッドでも UI が止まる（qa-reviewer が 4000x3000 ノイズ画像で 51 秒 GIL 保持を実測）。対策として長辺 2000px 超は縮小して変換（2026-11-23）
 - Qt の `QPixmap(path)` は EXIF 回転を反映しない。`QImageReader.setAutoTransform(True)` で反映され、変換結果と向きが一致。オフスクリーンで確認（2026-11-23）
 - PySide6 メタパッケージを `PySide6-Essentials` に替えても QtSvg を含めて動作し、.app は 110MB → 90MB（2026-11-23）
+- GitHub Actions（bamtech1904/svg-converter, run 45192099367）で Windows / macOS とも成功。Mac 版 Artifact を展開した arm64 .app は 5 秒以上起動を維持（2026-11-23）
 - ビルドした .app の Qt は最小 macOS 14.4、arm64 のみ（qa-reviewer が vtool で確認、2026-11-23）
 
 ## 一般則
@@ -21,7 +22,7 @@
 
 ## 未解決の失敗
 
-- GitHub Actions での Windows / macOS ビルドは未実行（リポジトリ未作成）。Windows 版の実機動作も未確認
+- Windows 版の実機動作が未確認（Actions でのビルド成功と、zip に SvgConverter.exe・vtracer の pyd・qsvg.dll が入っていることまでは確認済み）
 
 ## 教訓
 
@@ -29,4 +30,4 @@
 
 ## 前回セッション
 
-- 2026-11-23 · MVP（変換・プレビュー・保存・Actions 設定）を作成しローカル検証済み。qa-reviewer の重大指摘 0、中・軽微指摘は対応済み。次: GitHub リポジトリ作成と push、Actions の成功確認、Windows 実機（仮想マシン）での動作確認
+- 2026-11-23 · MVP（変換・プレビュー・保存・Actions 設定）を作成しローカル検証済み。qa-reviewer の重大指摘 0、中・軽微指摘は対応済み。非公開リポジトリ bamtech1904/svg-converter に push し Actions は両 OS 成功。次: Windows（仮想マシン）で exe を起動し PNG/JPEG の変換と保存を確認
