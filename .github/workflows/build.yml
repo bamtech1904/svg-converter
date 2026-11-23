@@ -6,6 +6,7 @@ permissions:
 on:
   push:
     branches: [main]
+    tags: ["v*"] # v1.2.3 形式のタグを push すると GitHub Release まで作る
   pull_request:
   workflow_dispatch:
 
@@ -50,3 +51,23 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.zip
           retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Release の作成に必要
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true # 両 OS の zip を同じフォルダに置く
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "SVG Converter $GITHUB_REF_NAME" \
+            --generate-notes \
+            SvgConverter-windows.zip SvgConverter-macos.zip
