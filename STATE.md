@@ -15,6 +15,7 @@
 - PySide6 メタパッケージを `PySide6-Essentials` に替えても QtSvg を含めて動作し、.app は 110MB → 90MB（2026-11-23）
 - GitHub Actions（bamtech1904/svg-converter, run 45192099367）で Windows / macOS とも成功。Mac 版 Artifact を展開した arm64 .app は 5 秒以上起動を維持（2026-11-23）
 - リポジトリは公開（2026-11-23）。MIT ライセンス。配布 zip の licenses/ に LGPL/GPL 本文と各ライブラリのライセンス原文が入ることを run 45194378450 の Artifact で確認。PySide6 の wheel にはライセンス本文が無いため LGPL/GPL は gnu.org から取得してリポジトリに置いている（2026-11-23）
+- `v*` タグの push で GitHub Release が作られ、両 OS の zip が添付される。v0.1.0 で、ログインなしの curl でダウンロードでき、Mac 版の起動と Windows zip の exe・licenses を確認（2026-11-23）
 - ビルドした .app の Qt は最小 macOS 14.4、arm64 のみ（qa-reviewer が vtool で確認、2026-11-23）
 
 ## 一般則
@@ -31,4 +32,4 @@
 
 ## 前回セッション
 
-- 2026-11-23 · MVP（変換・プレビュー・保存・Actions 設定）を作成しローカル検証済み。qa-reviewer の重大指摘 0、中・軽微指摘は対応済み。非公開リポジトリ bamtech1904/svg-converter に push し Actions は両 OS 成功。次: Windows（仮想マシン）で exe を起動し PNG/JPEG の変換と保存を確認
+- 2026-11-23 · MVP（変換・プレビュー・保存・Actions 設定）を作成しローカル検証済み。qa-reviewer の重大指摘 0、中・軽微指摘は対応済み。非公開リポジトリ bamtech1904/svg-converter に push し Actions は両 OS 成功。v0.1.0 を Releases に公開済み。次: Windows（仮想マシン）で exe を起動し PNG/JPEG の変換と保存を確認
