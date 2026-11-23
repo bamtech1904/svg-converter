@@ -14,6 +14,7 @@
 - Qt の `QPixmap(path)` は EXIF 回転を反映しない。`QImageReader.setAutoTransform(True)` で反映され、変換結果と向きが一致。オフスクリーンで確認（2026-11-23）
 - PySide6 メタパッケージを `PySide6-Essentials` に替えても QtSvg を含めて動作し、.app は 110MB → 90MB（2026-11-23）
 - GitHub Actions（bamtech1904/svg-converter, run 45192099367）で Windows / macOS とも成功。Mac 版 Artifact を展開した arm64 .app は 5 秒以上起動を維持（2026-11-23）
+- リポジトリは公開（2026-11-23）。MIT ライセンス。配布 zip の licenses/ に LGPL/GPL 本文と各ライブラリのライセンス原文が入ることを run 45194378450 の Artifact で確認。PySide6 の wheel にはライセンス本文が無いため LGPL/GPL は gnu.org から取得してリポジトリに置いている（2026-11-23）
 - ビルドした .app の Qt は最小 macOS 14.4、arm64 のみ（qa-reviewer が vtool で確認、2026-11-23）
 
 ## 一般則
