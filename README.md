@@ -42,3 +42,9 @@ open dist/SvgConverter.app
 - `converter.py` — 変換処理（vtracer）。画面に依存しない
 - `app.py` — 画面（PySide6）
 - `test_converter.py` — 変換処理のテスト
+- `scripts/collect_licenses.py` — 配布 zip に同梱するライセンス文書を集める（Actions から実行）
+
+## ライセンス
+
+MIT License（`LICENSE`）。配布するアプリには Qt / PySide6（LGPL-3.0）、vtracer、Pillow などを同梱している。
+一覧は `THIRD_PARTY_NOTICES.md`、各ライセンスの本文は配布 zip の `licenses/` フォルダにある。

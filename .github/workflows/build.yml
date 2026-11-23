@@ -32,12 +32,18 @@ jobs:
       - run: pyinstaller --noconfirm --windowed --name SvgConverter app.py
 
       # upload-artifact は実行権限やシンボリックリンクを保持しないため、先に zip にする
+      # zip の最上位に「アプリ本体」と「licenses フォルダ」を並べる
       - name: Package (macOS)
         if: runner.os == 'macOS'
-        run: ditto -c -k --keepParent dist/SvgConverter.app ${{ matrix.artifact }}.zip
+        run: |
+          ditto dist/SvgConverter.app package/SvgConverter.app
+          python scripts/collect_licenses.py package/licenses
+          ditto -c -k package ${{ matrix.artifact }}.zip
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        run: Compress-Archive -Path dist/SvgConverter -DestinationPath ${{ matrix.artifact }}.zip
+        run: |
+          python scripts/collect_licenses.py dist/SvgConverter/licenses
+          Compress-Archive -Path dist/SvgConverter -DestinationPath ${{ matrix.artifact }}.zip
 
       - uses: actions/upload-artifact@v7
         with:
